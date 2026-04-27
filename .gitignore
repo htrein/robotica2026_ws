@@ -5,5 +5,3 @@ build/
 *.log
 *.pyc
 __pycache__/
-
-src/phi_p3dx_planning/
