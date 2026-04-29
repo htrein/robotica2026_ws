@@ -37,32 +37,46 @@ private:
     bool following_;
     int  path_idx_;
 
-    double randDouble() { return (double)rand() / RAND_MAX; }
+    double randDouble() { 
+        return (double)rand() / RAND_MAX; 
+    }
 
-    double wrapAngle(double a) { return atan2(sin(a), cos(a)); }
+    double wrapAngle(double a) { 
+        return atan2(sin(a), cos(a)); 
+    }
 
-    bool isFree(double x, double y) {
-        if (!map_msg_) return true;
+    bool isFree(double x, double y, double margin = 0.0) {
+        if (!map_msg_) 
+            return true;
         const auto& info = map_msg_->info;
         int gx = (x - info.origin.position.x) / info.resolution;
         int gy = (y - info.origin.position.y) / info.resolution;
-        if (gx < 0 || gy < 0 || gx >= (int)info.width || gy >= (int)info.height)
-            return false;
-        int val = map_msg_->data[gy * info.width + gx];
-        return val >= 0 && val < 50;  
-    }
 
-    // Verifica a nova posição e seu ponto médio com o pai
-    bool edgeFree(double x1, double y1, double x2, double y2) {
-        const int steps = 10;
-        for (int i = 1; i <= steps; ++i) {
-            double t = i / (double)steps;
-            double px = x1 + t * (x2 - x1);
-            double py = y1 + t * (y2 - y1);
-            if (!isFree(px, py)) return false;
+        if (margin <= 0.0) {
+            if (gx < 0 || gy < 0 || gx >= (int)info.width || gy >= (int)info.height)
+                return false;
+            int val = map_msg_->data[gy * info.width + gx];
+            return val >= 0 && val < 50;  
+        }
+
+        int r_cells = std::ceil(margin / info.resolution);
+        for (int dy = -r_cells; dy <= r_cells; ++dy) {
+            for (int dx = -r_cells; dx <= r_cells; ++dx) {
+                if (dx*dx + dy*dy <= r_cells*r_cells) {
+                    int nx = gx + dx;
+                    int ny = gy + dy;
+                    if (nx < 0 || ny < 0 || nx >= (int)info.width || ny >= (int)info.height)
+                        return false;
+                    int val = map_msg_->data[ny * info.width + nx];
+                    if (val < 0 || val >= 50)
+                        return false;
+                }
+            }
         }
         return true;
     }
+
+
 
     // Retorna o nó mais próximo de (x, y)
     TreeNode* nearest(double x, double y) {
@@ -70,7 +84,10 @@ private:
         double dmin = 1e9;
         for (TreeNode* n : tree_) {
             double d = hypot(n->x - x, n->y - y);
-            if (d < dmin) { dmin = d; best = n; }
+            if (d < dmin) { 
+                dmin = d; 
+                best = n; 
+            }
         }
         return best;
     }
@@ -79,12 +96,31 @@ private:
     TreeNode* extend(TreeNode* n, double tx, double ty) {
         double dx = tx - n->x, dy = ty - n->y;
         double d  = hypot(dx, dy);
-        if (d > STEP) { dx = dx/d * STEP; dy = dy/d * STEP; }
+        if (d > STEP) { 
+            dx = dx/d * STEP; 
+            dy = dy/d * STEP; 
+        }
 
-        double nx = n->x + dx, ny = n->y + dy;
-        if (!edgeFree(n->x, n->y, nx, ny)) return nullptr;
+        const int steps = 10;
+        double last_x = n->x;
+        double last_y = n->y;
+        bool valid = false;
 
-        TreeNode* novo = new TreeNode(nx, ny, n);
+        for (int i = 1; i <= steps; ++i) {
+            double t = i / (double)steps;
+            double px = n->x + t * dx;
+            double py = n->y + t * dy;
+            if (!isFree(px, py, 0.25)) 
+                break;
+            last_x = px;
+            last_y = py;
+            valid = true;
+        }
+
+        if (!valid) 
+            return nullptr;
+
+        TreeNode* novo = new TreeNode(last_x, last_y, n);
         tree_.push_back(novo);
         return novo;
     }
@@ -113,11 +149,10 @@ private:
         const auto& info = map_msg_->info;
         double map_w = info.width  * info.resolution;
         double map_h = info.height * info.resolution;
-        double ox    = info.origin.position.x;
-        double oy    = info.origin.position.y;
+        double ox = info.origin.position.x;
+        double oy = info.origin.position.y;
 
         for (int i = 0; i < MAX_ITER; i++) {
-            // Amostragem com goal bias
             double rx = (randDouble() < GOAL_BIAS) ? gx : ox + randDouble() * map_w;
             double ry = (randDouble() < GOAL_BIAS) ? gy : oy + randDouble() * map_h;
 
@@ -149,8 +184,10 @@ private:
 
             if (n->parent) {
                 geometry_msgs::msg::Point a, b;
-                a.x = n->parent->x; a.y = n->parent->y;
-                b.x = n->x;         b.y = n->y;
+                a.x = n->parent->x; 
+                a.y = n->parent->y;
+                b.x = n->x;         
+                b.y = n->y;
                 edges_marker_.points.push_back(a);
                 edges_marker_.points.push_back(b);
             }
@@ -161,11 +198,11 @@ private:
         if (!path_.empty()) {
             visualization_msgs::msg::Marker m;
             m.header.frame_id = "map";
-            m.header.stamp    = now();
-            m.ns              = "path";
-            m.id              = 0;
-            m.type            = visualization_msgs::msg::Marker::LINE_STRIP;
-            m.scale.x         = 0.08;
+            m.header.stamp = now();
+            m.ns = "path";
+            m.id = 0;
+            m.type = visualization_msgs::msg::Marker::LINE_STRIP;
+            m.scale.x = 0.08;
             m.color.r = 1.0f;
             m.color.g = 1.0f;
             m.color.b = 0.0f;
@@ -182,7 +219,8 @@ private:
     }
 
     void on_goal() override {
-        if (!has_goal() || !map_msg_) return;
+        if (!has_goal() || !map_msg_) 
+            return;
         auto [gx, gy] = goal_;
 
         following_ = false;
@@ -225,7 +263,6 @@ private:
             if (following_) {
                 clear_goal();
                 following_ = false;
-                RCLCPP_INFO(get_logger(), "[rrt] Goal reached!");
             }
             draw();
             return;

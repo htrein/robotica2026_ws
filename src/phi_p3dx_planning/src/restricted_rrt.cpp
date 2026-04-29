@@ -39,19 +39,44 @@ private:
     bool following_;
     int  path_idx_;
 
-    double randDouble() { return (double)rand() / RAND_MAX; }
+    double randDouble() { 
+        return (double)rand() / RAND_MAX; 
+    }
 
-    double wrapAngle(double a) { return atan2(sin(a), cos(a)); }
+    double wrapAngle(double a) {
+        return atan2(sin(a), cos(a)); 
+    }
 
-    bool isFree(double x, double y) {
-        if (!map_msg_) return true;
+    bool isFree(double x, double y, double margin = 0.0) {
+        if (!map_msg_) 
+            return true;
+
         const auto& info = map_msg_->info;
         int gx = (x - info.origin.position.x) / info.resolution;
         int gy = (y - info.origin.position.y) / info.resolution;
-        if (gx < 0 || gy < 0 || gx >= (int)info.width || gy >= (int)info.height)
-            return false;
-        int val = map_msg_->data[gy * info.width + gx];
-        return val >= 0 && val < 50;
+        
+        if (margin <= 0.0) {
+            if (gx < 0 || gy < 0 || gx >= (int)info.width || gy >= (int)info.height)
+                return false;
+            int val = map_msg_->data[gy * info.width + gx];
+            return val >= 0 && val < 50;
+        }
+
+        int r_cells = std::ceil(margin / info.resolution);
+        for (int dy = -r_cells; dy <= r_cells; ++dy) {
+            for (int dx = -r_cells; dx <= r_cells; ++dx) {
+                if (dx*dx + dy*dy <= r_cells*r_cells) {
+                    int nx = gx + dx;
+                    int ny = gy + dy;
+                    if (nx < 0 || ny < 0 || nx >= (int)info.width || ny >= (int)info.height)
+                        return false;
+                    int val = map_msg_->data[ny * info.width + nx];
+                    if (val < 0 || val >= 50)
+                        return false;
+                }
+            }
+        }
+        return true;
     }
 
     TreeNode* nearest(double x, double y) {
@@ -68,32 +93,34 @@ private:
         double desired = atan2(ty - n->y, tx - n->x);
         double w = std::clamp(wrapAngle(desired - n->theta), -W_MAX, W_MAX);
 
-        double nx, ny, nt;
-        if (fabs(w) < W_EPS) {
-            nx = n->x + V0 * DT * cos(n->theta);
-            ny = n->y + V0 * DT * sin(n->theta);
-            nt = n->theta;
-        } else {
-            nx = n->x + (V0/w) * (sin(n->theta + w * DT) - sin(n->theta));
-            ny = n->y - (V0/w) * (cos(n->theta + w * DT) - cos(n->theta));
-            nt = wrapAngle(n->theta + w * DT);
-        }
-
         const int steps = 10;
+        double last_x = n->x, last_y = n->y, last_t = n->theta;
+        bool valid = false;
+
         for (int i = 1; i <= steps; ++i) {
             double t = DT * i / (double)steps;
-            double px, py;
+            double px, py, pt;
             if (fabs(w) < W_EPS) {
                 px = n->x + V0 * t * cos(n->theta);
                 py = n->y + V0 * t * sin(n->theta);
+                pt = n->theta;
             } else {
                 px = n->x + (V0/w) * (sin(n->theta + w * t) - sin(n->theta));
                 py = n->y - (V0/w) * (cos(n->theta + w * t) - cos(n->theta));
+                pt = wrapAngle(n->theta + w * t);
             }
-            if (!isFree(px, py)) return nullptr;
+            if (!isFree(px, py, 0.25)) 
+                break;
+            last_x = px;
+            last_y = py;
+            last_t = pt;
+            valid = true;
         }
 
-        TreeNode* novo = new TreeNode(nx, ny, nt, n);
+        if (!valid) 
+            return nullptr;
+
+        TreeNode* novo = new TreeNode(last_x, last_y, last_t, n);
         tree_.push_back(novo);
         return novo;
     }
@@ -106,12 +133,14 @@ private:
     }
 
     void clearTree() {
-        for (TreeNode* n : tree_) delete n;
+        for (TreeNode* n : tree_) 
+            delete n;
         tree_.clear();
     }
 
     bool solve(double sx, double sy, double stheta, double gx, double gy) {
-        if (!map_msg_ || !isFree(sx, sy) || !isFree(gx, gy)) return false;
+        if (!map_msg_ || !isFree(sx, sy) || !isFree(gx, gy)) 
+            return false;
 
         clearTree();
         tree_.push_back(new TreeNode(sx, sy, stheta));
@@ -152,8 +181,10 @@ private:
 
             if (n->parent) {
                 geometry_msgs::msg::Point a, b;
-                a.x = n->parent->x; a.y = n->parent->y;
-                b.x = n->x;         b.y = n->y;
+                a.x = n->parent->x; 
+                a.y = n->parent->y;
+                b.x = n->x;         
+                b.y = n->y;
                 edges_marker_.points.push_back(a);
                 edges_marker_.points.push_back(b);
             }
@@ -164,11 +195,11 @@ private:
         if (!path_.empty()) {
             visualization_msgs::msg::Marker m;
             m.header.frame_id = "map";
-            m.header.stamp    = now();
-            m.ns              = "path";
-            m.id              = 0;
-            m.type            = visualization_msgs::msg::Marker::LINE_STRIP;
-            m.scale.x         = 0.08;
+            m.header.stamp = now();
+            m.ns = "path";
+            m.id = 0;
+            m.type = visualization_msgs::msg::Marker::LINE_STRIP;
+            m.scale.x = 0.08;
             m.color.r = 1.0f;
             m.color.g = 1.0f;
             m.color.b = 0.0f;
@@ -185,7 +216,8 @@ private:
     }
 
     void on_goal() override {
-        if (!has_goal() || !map_msg_) return;
+        if (!has_goal() || !map_msg_) 
+            return;
         auto [gx, gy] = goal_;
 
         following_ = false;
@@ -229,7 +261,6 @@ private:
             if (following_) {
                 clear_goal();
                 following_ = false;
-                RCLCPP_INFO(get_logger(), "[rrt_kinematic] Goal reached!");
             }
             draw();
             return;
