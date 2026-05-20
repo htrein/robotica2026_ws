@@ -34,6 +34,18 @@ ros2 run phi_p3dx_navigation wall_follower_pid
 ros2 run phi_p3dx_navigation vfh_simplified
 ```
 
+### Implementação TP2
+```bash
+ros2 run phi_p3dx_planning rrt_cpp
+ros2 run phi_p3dx_planning restricted_rrt_cpp
+```
+
+### Implementação TP3
+```bash
+ros2 run phi_p3dx_mapping tp3_mapping_cpp
+ros2 run phi_p3dx_mapping tp3_exploration_cpp
+```
+
 ## Importante:
 - **Wall Following com PID**: Recomenda-se utilizar o mapa `indoor.map`, pois este contém corredores adequados para o comportamento esperado.
 - **VFH (Vector Field Histogram)**: Recomenda-se utilizar ambientes com obstáculos (`obstacles` ou `obstacles.map`).
