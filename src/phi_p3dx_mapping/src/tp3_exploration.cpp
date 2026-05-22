@@ -35,33 +35,39 @@ protected:
     for (int i = 0; i < width * height; ++i) {
       if (map_msg_->data[i] == -1) {
         potential_field[i] = 0.0;        
-      } else if (map_msg_->data[i] > 60) {
+      } else if (map_msg_->data[i] >= 50) {
         potential_field[i] = 1.0;       
       }
-    }
-
-    //fixa as bordas do mapa como desconhecidas 
-    for (int x = 0; x < width; ++x) {
-      potential_field[0 * width + x] = 0.0;                 
-      potential_field[(height-1) * width + x] = 0.0;        
-    }
-    for (int y = 0; y < height; ++y) {
-      potential_field[y * width + 0] = 0.0;                 
-      potential_field[y * width + (width-1)] = 0.0;         
     }
 
     //Gauss-Seidel
     const int N = 150;
     for (int k = 0; k < N; ++k) {
-      //percorre todas as células (excluindo as bordas)
-      for (int y = 1; y < height - 1; ++y) {
-        for (int x = 1; x < width - 1; ++x) {
+      // percorre todas as células do mapa
+      for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
           int idx = y * width + x;
-          // Dirichlet
-          if (map_msg_->data[idx] == -1 || map_msg_->data[idx] > 60)
+          
+          // respeita condições de Dirichlet: não atualiza células desconhecidas ou ocupadas
+          if (map_msg_->data[idx] == -1 || map_msg_->data[idx] >= 50)
             continue;
-          //celula livre eh a média dos seus 4 vizinhos  
-          potential_field[idx] = (potential_field[y * width + (x+1)] + potential_field[y * width + (x-1)] + potential_field[(y+1) * width + x] + potential_field[(y-1) * width + x]) / 4.0;
+          
+          // para células livres: média dos 4 vizinhos (aproximação da solução harmônica)
+          double sum = 0.0;
+          int count = 0;
+          
+          // norte
+          if (y > 0) { sum += potential_field[(y-1) * width + x]; count++; }
+          // sul
+          if (y < height - 1) { sum += potential_field[(y+1) * width + x]; count++; }
+          // oeste
+          if (x > 0) { sum += potential_field[y * width + (x-1)]; count++; }
+          // leste
+          if (x < width - 1) { sum += potential_field[y * width + (x+1)]; count++; }
+          
+          if (count > 0) {
+            potential_field[idx] = sum / count;
+          }
         }
       }
     }
